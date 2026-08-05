@@ -1,0 +1,4 @@
+azure-functions
+playwright
+fastapi
+uvicorn[standard]

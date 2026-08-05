@@ -1,0 +1,4 @@
+.venv
+.venv_mingw_backup
+local.settings.json
+__pycache__

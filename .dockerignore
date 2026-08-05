@@ -1,0 +1,7 @@
+.venv
+.venv_mingw_backup
+__pycache__
+.vscode
+.git
+.gitignore
+local.settings.json
