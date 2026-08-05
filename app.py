@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from playwright.sync_api import sync_playwright
 import logging
-import re
 
 TARGET_URL = (
     "https://www.mcmc.gov.my/en/legal/registers/cma-registers/"
@@ -37,26 +36,6 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
         )
         page = context.new_page()
         page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=90000)
-
-        pager_target = None
-        detected_last_page = 1
-        pager_links = page.query_selector_all(
-            "nav[aria-label='Page navigation example'] a[href*='__doPostBack']"
-        )
-        for link in pager_links:
-            href = link.get_attribute("href") or ""
-            match = re.search(r"__doPostBack\('([^']+)'\s*,\s*'([^']+)'\)", href)
-            if not match:
-                continue
-
-            pager_target = pager_target or match.group(1)
-            page_token = match.group(2)
-            if page_token.isdigit():
-                detected_last_page = max(detected_last_page, int(page_token))
-
-        max_page_to_scrape = detected_last_page
-        if max_pages is not None:
-            max_page_to_scrape = min(max_page_to_scrape, max_pages)
 
         current_page = 1
         while True:
@@ -99,23 +78,20 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                         }
                     )
 
-            if current_page >= max_page_to_scrape:
-                break
-
-            if not pager_target:
+            if max_pages is not None and current_page >= max_pages:
                 break
 
             first_row_before = rows[0].inner_text().strip()
             next_page_number = current_page + 1
 
-            page.evaluate(
-                """(args) => {
-                    if (typeof __doPostBack === 'function') {
-                        __doPostBack(args.target, String(args.nextPage));
-                    }
-                }""",
-                {"target": pager_target, "nextPage": next_page_number},
-            )
+            next_link = page.locator(
+                f"nav[aria-label='Page navigation example'] a:text-is('{next_page_number}')"
+            ).first
+            if next_link.count() == 0:
+                break
+
+            next_link.scroll_into_view_if_needed()
+            next_link.click(force=True)
 
             try:
                 page.wait_for_function(
