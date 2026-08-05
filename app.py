@@ -19,7 +19,7 @@ def root() -> dict[str, str]:
     }
 
 
-def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
+def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
 
     with sync_playwright() as p:
@@ -37,7 +37,8 @@ def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
         page = context.new_page()
         page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=90000)
 
-        for current_page in range(max_pages):
+        current_page = 0
+        while True:
             try:
                 # In containerized headless runs, table can be attached before visible.
                 page.wait_for_selector("table tbody tr", state="attached", timeout=45000)
@@ -77,14 +78,31 @@ def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
                         }
                     )
 
-            next_button = page.query_selector(
-                "a[title='Next'], a:has-text('Next'), a:has-text('>')"
-            )
-            if next_button and current_page < max_pages - 1:
-                next_button.click()
-                page.wait_for_timeout(3000)
-            else:
+            current_page += 1
+            if max_pages is not None and current_page >= max_pages:
                 break
+
+            next_button = page.locator(
+                "a[title='Next'], a:has-text('Next'), a:has-text('>')"
+            ).first
+            if next_button.count() == 0:
+                break
+
+            first_row_before = rows[0].inner_text().strip()
+            next_button.scroll_into_view_if_needed()
+            next_button.click(force=True)
+
+            try:
+                page.wait_for_function(
+                    "prev => {
+                        const row = document.querySelector('table tbody tr');
+                        return row && row.innerText.trim() !== prev;
+                    }",
+                    first_row_before,
+                    timeout=30000,
+                )
+            except Exception:
+                page.wait_for_timeout(5000)
 
         context.close()
         browser.close()
@@ -101,7 +119,7 @@ def health() -> dict[str, str]:
 def scrape() -> list[dict[str, str]]:
     try:
         logging.info("MCMC scrape started")
-        return scrape_mcmc(max_pages=5)
+        return scrape_mcmc()
     except Exception as exc:
         logging.exception("MCMC scrape failed")
         raise HTTPException(status_code=500, detail=f"Scrape failed: {exc}") from exc
