@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from playwright.sync_api import sync_playwright
 import logging
+import re
 
 TARGET_URL = (
     "https://www.mcmc.gov.my/en/legal/registers/cma-registers/"
@@ -37,7 +38,27 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
         page = context.new_page()
         page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=90000)
 
-        current_page = 0
+        pager_target = None
+        detected_last_page = 1
+        pager_links = page.query_selector_all(
+            "nav[aria-label='Page navigation example'] a[href*='__doPostBack']"
+        )
+        for link in pager_links:
+            href = link.get_attribute("href") or ""
+            match = re.search(r"__doPostBack\('([^']+)'\s*,\s*'([^']+)'\)", href)
+            if not match:
+                continue
+
+            pager_target = pager_target or match.group(1)
+            page_token = match.group(2)
+            if page_token.isdigit():
+                detected_last_page = max(detected_last_page, int(page_token))
+
+        max_page_to_scrape = detected_last_page
+        if max_pages is not None:
+            max_page_to_scrape = min(max_page_to_scrape, max_pages)
+
+        current_page = 1
         while True:
             try:
                 # In containerized headless runs, table can be attached before visible.
@@ -78,19 +99,23 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                         }
                     )
 
-            current_page += 1
-            if max_pages is not None and current_page >= max_pages:
+            if current_page >= max_page_to_scrape:
                 break
 
-            next_button = page.locator(
-                "a[title='Next'], a:has-text('Next'), a:has-text('>')"
-            ).first
-            if next_button.count() == 0:
+            if not pager_target:
                 break
 
             first_row_before = rows[0].inner_text().strip()
-            next_button.scroll_into_view_if_needed()
-            next_button.click(force=True)
+            next_page_number = current_page + 1
+
+            page.evaluate(
+                """(args) => {
+                    if (typeof __doPostBack === 'function') {
+                        __doPostBack(args.target, String(args.nextPage));
+                    }
+                }""",
+                {"target": pager_target, "nextPage": next_page_number},
+            )
 
             try:
                 page.wait_for_function(
@@ -103,6 +128,8 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                 )
             except Exception:
                 page.wait_for_timeout(5000)
+
+            current_page = next_page_number
 
         context.close()
         browser.close()
@@ -119,7 +146,7 @@ def health() -> dict[str, str]:
 def scrape() -> list[dict[str, str]]:
     try:
         logging.info("MCMC scrape started")
-        return scrape_mcmc()
+        return scrape_mcmc(max_pages=5)
     except Exception as exc:
         logging.exception("MCMC scrape failed")
         raise HTTPException(status_code=500, detail=f"Scrape failed: {exc}") from exc
