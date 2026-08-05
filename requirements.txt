@@ -1,4 +1,4 @@
 azure-functions
-playwright
+playwright==1.62.0
 fastapi
 uvicorn[standard]
