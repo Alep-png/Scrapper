@@ -94,10 +94,10 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
 
             try:
                 page.wait_for_function(
-                    "prev => {
+                    """prev => {
                         const row = document.querySelector('table tbody tr');
                         return row && row.innerText.trim() !== prev;
-                    }",
+                    }""",
                     first_row_before,
                     timeout=30000,
                 )
