@@ -2,6 +2,11 @@ from fastapi import FastAPI, HTTPException
 from playwright.sync_api import sync_playwright
 import logging
 
+TARGET_URL = (
+    "https://www.mcmc.gov.my/en/legal/registers/cma-registers/"
+    "register-of-directions-section-54-1/list-of-register-of-directions-section-54"
+)
+
 app = FastAPI(title="MCMC Scraper API")
 
 
@@ -22,15 +27,27 @@ def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage"]
         )
-        page = browser.new_page()
-        page.goto(
-            "https://www.mcmc.gov.my/en/legal/registers/cma-registers/register-of-directions-section-54-1/list-of-register-of-directions-section-54"
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            )
         )
+        page = context.new_page()
+        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=90000)
 
         for current_page in range(max_pages):
-            page.wait_for_selector("table")
+            try:
+                # In containerized headless runs, table can be attached before visible.
+                page.wait_for_selector("table tbody tr", state="attached", timeout=45000)
+            except Exception:
+                page.wait_for_load_state("networkidle", timeout=20000)
 
             rows = page.query_selector_all("table tbody tr")
+            if not rows:
+                break
+
             for row in rows:
                 cols = row.query_selector_all("td")
                 if len(cols) >= 4:
@@ -60,13 +77,16 @@ def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
                         }
                     )
 
-            next_button = page.query_selector("a:has-text('Next'), a:has-text('>')")
+            next_button = page.query_selector(
+                "a[title='Next'], a:has-text('Next'), a:has-text('>')"
+            )
             if next_button and current_page < max_pages - 1:
                 next_button.click()
                 page.wait_for_timeout(3000)
             else:
                 break
 
+        context.close()
         browser.close()
 
     return results
