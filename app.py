@@ -5,6 +5,15 @@ import logging
 app = FastAPI(title="MCMC Scraper API")
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "service": "mcmc-scraper-api",
+        "health": "/health",
+        "scrape": "/scrape",
+    }
+
+
 def scrape_mcmc(max_pages: int = 5) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
 
