@@ -68,19 +68,24 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
 
                     const links = Array.from(nav.querySelectorAll("a[href*='__doPostBack']"));
                     let best = null;
+                    let bestLink = null;
 
                     for (const link of links) {
                         const href = link.getAttribute("href") || "";
                         const m = href.match(/__doPostBack\('([^']+)'\s*,\s*'(\d+)'\)/);
                         if (!m) continue;
 
-                        const target = m[1];
                         const pageNum = parseInt(m[2], 10);
                         if (Number.isNaN(pageNum) || pageNum <= currentPage) continue;
 
                         if (!best || pageNum < best.pageNum) {
-                            best = { target: target, pageNum: pageNum };
+                            best = { pageNum: pageNum };
+                            bestLink = link;
                         }
+                    }
+
+                    if (best && bestLink) {
+                        bestLink.click();
                     }
 
                     return best;
@@ -89,13 +94,17 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
             )
 
             if next_page:
-                page.evaluate(
-                    """(nextInfo) => {
-                        __doPostBack(nextInfo.target, String(nextInfo.pageNum));
-                    }""",
-                    next_page,
-                )
-                page.wait_for_timeout(3000) # Pause for ASP.NET postback to complete
+                try:
+                    page.wait_for_function(
+                        """prev => {
+                            const row = document.querySelector('table tbody tr');
+                            return row && row.innerText.trim() !== prev;
+                        }""",
+                        first_row_before,
+                        timeout=30000,
+                    )
+                except Exception:
+                    page.wait_for_timeout(5000)
 
                 first_row_after = ""
                 first_row_after_el = page.query_selector("table tbody tr")

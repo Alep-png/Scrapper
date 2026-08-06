@@ -91,19 +91,24 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
 
                     const links = Array.from(nav.querySelectorAll("a[href*='__doPostBack']"));
                     let best = null;
+                    let bestLink = null;
 
                     for (const link of links) {
                         const href = link.getAttribute("href") || "";
                         const m = href.match(/__doPostBack\('([^']+)'\s*,\s*'(\d+)'\)/);
                         if (!m) continue;
 
-                        const target = m[1];
                         const pageNum = parseInt(m[2], 10);
                         if (Number.isNaN(pageNum) || pageNum <= currentPage) continue;
 
                         if (!best || pageNum < best.pageNum) {
-                            best = { target: target, pageNum: pageNum };
+                            best = { pageNum: pageNum };
+                            bestLink = link;
                         }
+                    }
+
+                    if (best && bestLink) {
+                        bestLink.click();
                     }
 
                     return best;
@@ -113,13 +118,6 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
 
             if not next_page:
                 break
-
-            page.evaluate(
-                """(nextInfo) => {
-                    __doPostBack(nextInfo.target, String(nextInfo.pageNum));
-                }""",
-                next_page,
-            )
 
             try:
                 page.wait_for_function(
