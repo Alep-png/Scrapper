@@ -58,11 +58,28 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
             if max_pages is not None and current_page >= max_pages:
                 break
 
-            # Click 'Next' button if present
-            next_button = page.query_selector("a:has-text('Next'), a:has-text('>')")
+            first_row_before = rows[0].inner_text().strip() if rows else ""
+
+            # Numbered links can roll in groups (for example 1-10), so use Next.
+            next_button = page.query_selector(
+                "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
+                "nav[aria-label='Page navigation example'] a[rel='next'], "
+                "nav[aria-label='Page navigation example'] a:has-text('Next'), "
+                "nav[aria-label='Page navigation example'] a:has-text('>')"
+            )
             if next_button:
-                next_button.click()
+                next_button.scroll_into_view_if_needed()
+                next_button.click(force=True)
                 page.wait_for_timeout(3000) # Pause for ASP.NET postback to complete
+
+                first_row_after = ""
+                first_row_after_el = page.query_selector("table tbody tr")
+                if first_row_after_el:
+                    first_row_after = first_row_after_el.inner_text().strip()
+
+                if first_row_after == first_row_before:
+                    break
+
                 current_page += 1
             else:
                 break

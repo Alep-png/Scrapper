@@ -82,10 +82,13 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                 break
 
             first_row_before = rows[0].inner_text().strip()
-            next_page_number = current_page + 1
 
+            # Numbered links can roll in groups (for example 1-10), so use Next.
             next_link = page.locator(
-                f"nav[aria-label='Page navigation example'] a:text-is('{next_page_number}')"
+                "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
+                "nav[aria-label='Page navigation example'] a[rel='next'], "
+                "nav[aria-label='Page navigation example'] a:has-text('Next'), "
+                "nav[aria-label='Page navigation example'] a:has-text('>')"
             ).first
             if next_link.count() == 0:
                 break
@@ -105,7 +108,15 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
             except Exception:
                 page.wait_for_timeout(5000)
 
-            current_page = next_page_number
+            first_row_after = ""
+            first_row_after_el = page.query_selector("table tbody tr")
+            if first_row_after_el:
+                first_row_after = first_row_after_el.inner_text().strip()
+
+            if first_row_after == first_row_before:
+                break
+
+            current_page += 1
 
         context.close()
         browser.close()
