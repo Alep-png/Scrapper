@@ -84,22 +84,42 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
 
             first_row_before = rows[0].inner_text().strip()
 
-            # Numbered links can roll in groups (for example 1-10), so use Next.
-            next_link = page.locator(
-                "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
-                "nav[aria-label='Page navigation example'] a[rel='next'], "
-                "nav[aria-label='Page navigation example'] a:has-text('Next'), "
-                "nav[aria-label='Page navigation example'] a:has-text('>'), "
-                ".pagination a[aria-label='Next'], "
-                ".pagination a[rel='next'], "
-                ".pagination a:has-text('Next'), "
-                ".pagination a:has-text('>')"
-            ).first
-            if next_link.count() == 0:
+            next_page = page.evaluate(
+                """(currentPage) => {
+                    const nav = document.querySelector("nav[aria-label='Page navigation example']");
+                    if (!nav) return null;
+
+                    const links = Array.from(nav.querySelectorAll("a[href*='__doPostBack']"));
+                    let best = null;
+
+                    for (const link of links) {
+                        const href = link.getAttribute("href") || "";
+                        const m = href.match(/__doPostBack\('([^']+)'\s*,\s*'(\d+)'\)/);
+                        if (!m) continue;
+
+                        const target = m[1];
+                        const pageNum = parseInt(m[2], 10);
+                        if (Number.isNaN(pageNum) || pageNum <= currentPage) continue;
+
+                        if (!best || pageNum < best.pageNum) {
+                            best = { target: target, pageNum: pageNum };
+                        }
+                    }
+
+                    return best;
+                }""",
+                current_page,
+            )
+
+            if not next_page:
                 break
 
-            next_link.scroll_into_view_if_needed()
-            next_link.click(force=True)
+            page.evaluate(
+                """(nextInfo) => {
+                    __doPostBack(nextInfo.target, String(nextInfo.pageNum));
+                }""",
+                next_page,
+            )
 
             try:
                 page.wait_for_function(
@@ -127,7 +147,7 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
             if stagnant_steps >= 2:
                 break
 
-            current_page += 1
+            current_page = int(next_page["pageNum"])
 
         context.close()
         browser.close()

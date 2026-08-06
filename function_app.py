@@ -61,20 +61,40 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
 
             first_row_before = rows[0].inner_text().strip() if rows else ""
 
-            # Numbered links can roll in groups (for example 1-10), so use Next.
-            next_button = page.query_selector(
-                "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
-                "nav[aria-label='Page navigation example'] a[rel='next'], "
-                "nav[aria-label='Page navigation example'] a:has-text('Next'), "
-                "nav[aria-label='Page navigation example'] a:has-text('>'), "
-                ".pagination a[aria-label='Next'], "
-                ".pagination a[rel='next'], "
-                ".pagination a:has-text('Next'), "
-                ".pagination a:has-text('>')"
+            next_page = page.evaluate(
+                """(currentPage) => {
+                    const nav = document.querySelector("nav[aria-label='Page navigation example']");
+                    if (!nav) return null;
+
+                    const links = Array.from(nav.querySelectorAll("a[href*='__doPostBack']"));
+                    let best = null;
+
+                    for (const link of links) {
+                        const href = link.getAttribute("href") || "";
+                        const m = href.match(/__doPostBack\('([^']+)'\s*,\s*'(\d+)'\)/);
+                        if (!m) continue;
+
+                        const target = m[1];
+                        const pageNum = parseInt(m[2], 10);
+                        if (Number.isNaN(pageNum) || pageNum <= currentPage) continue;
+
+                        if (!best || pageNum < best.pageNum) {
+                            best = { target: target, pageNum: pageNum };
+                        }
+                    }
+
+                    return best;
+                }""",
+                current_page,
             )
-            if next_button:
-                next_button.scroll_into_view_if_needed()
-                next_button.click(force=True)
+
+            if next_page:
+                page.evaluate(
+                    """(nextInfo) => {
+                        __doPostBack(nextInfo.target, String(nextInfo.pageNum));
+                    }""",
+                    next_page,
+                )
                 page.wait_for_timeout(3000) # Pause for ASP.NET postback to complete
 
                 first_row_after = ""
@@ -91,7 +111,7 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
                 if stagnant_steps >= 2:
                     break
 
-                current_page += 1
+                current_page = int(next_page["pageNum"])
             else:
                 break
                 
