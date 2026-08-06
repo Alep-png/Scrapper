@@ -25,6 +25,7 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
         # Set to an int (for example, 5) to cap pages for automation later.
         max_pages = None
         current_page = 1
+        stagnant_steps = 0
 
         while True:
             page.wait_for_selector("table")
@@ -65,7 +66,11 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
                 "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
                 "nav[aria-label='Page navigation example'] a[rel='next'], "
                 "nav[aria-label='Page navigation example'] a:has-text('Next'), "
-                "nav[aria-label='Page navigation example'] a:has-text('>')"
+                "nav[aria-label='Page navigation example'] a:has-text('>'), "
+                ".pagination a[aria-label='Next'], "
+                ".pagination a[rel='next'], "
+                ".pagination a:has-text('Next'), "
+                ".pagination a:has-text('>')"
             )
             if next_button:
                 next_button.scroll_into_view_if_needed()
@@ -78,6 +83,12 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
                     first_row_after = first_row_after_el.inner_text().strip()
 
                 if first_row_after == first_row_before:
+                    stagnant_steps += 1
+                else:
+                    stagnant_steps = 0
+
+                # Allow one slow/non-changing step, then stop to avoid infinite loops.
+                if stagnant_steps >= 2:
                     break
 
                 current_page += 1

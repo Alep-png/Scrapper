@@ -38,6 +38,7 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
         page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=90000)
 
         current_page = 1
+        stagnant_steps = 0
         while True:
             try:
                 # In containerized headless runs, table can be attached before visible.
@@ -88,7 +89,11 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                 "nav[aria-label='Page navigation example'] li.page-item:not(.disabled) a[aria-label='Next'], "
                 "nav[aria-label='Page navigation example'] a[rel='next'], "
                 "nav[aria-label='Page navigation example'] a:has-text('Next'), "
-                "nav[aria-label='Page navigation example'] a:has-text('>')"
+                "nav[aria-label='Page navigation example'] a:has-text('>'), "
+                ".pagination a[aria-label='Next'], "
+                ".pagination a[rel='next'], "
+                ".pagination a:has-text('Next'), "
+                ".pagination a:has-text('>')"
             ).first
             if next_link.count() == 0:
                 break
@@ -114,6 +119,12 @@ def scrape_mcmc(max_pages: int | None = None) -> list[dict[str, str]]:
                 first_row_after = first_row_after_el.inner_text().strip()
 
             if first_row_after == first_row_before:
+                stagnant_steps += 1
+            else:
+                stagnant_steps = 0
+
+            # Allow one slow/non-changing step, then stop to avoid infinite loops.
+            if stagnant_steps >= 2:
                 break
 
             current_page += 1
