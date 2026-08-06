@@ -22,8 +22,8 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
         # Navigate to MCMC Register page
         page.goto("https://www.mcmc.gov.my/en/legal/registers/cma-registers/register-of-directions-section-54-1/list-of-register-of-directions-section-54")
         
-        # Set to an int (for example, 5) to cap pages for automation later.
-        max_pages = None
+        # Temporary cap to keep runtime within flow timeout limits.
+        max_pages = 10
         current_page = 1
         stagnant_steps = 0
 
