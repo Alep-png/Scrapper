@@ -22,9 +22,11 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
         # Navigate to MCMC Register page
         page.goto("https://www.mcmc.gov.my/en/legal/registers/cma-registers/register-of-directions-section-54-1/list-of-register-of-directions-section-54")
         
-        max_pages = 5  # Check the top 5 recent pages daily
-        
-        for current_page in range(max_pages):
+        # Set to an int (for example, 5) to cap pages for automation later.
+        max_pages = None
+        current_page = 1
+
+        while True:
             page.wait_for_selector("table")
             
             rows = page.query_selector_all("table tbody tr")
@@ -53,11 +55,15 @@ def MCMCScraper(req: func.HttpRequest) -> func.HttpResponse:
                         "Details": details_text
                     })
             
+            if max_pages is not None and current_page >= max_pages:
+                break
+
             # Click 'Next' button if present
             next_button = page.query_selector("a:has-text('Next'), a:has-text('>')")
-            if next_button and current_page < max_pages - 1:
+            if next_button:
                 next_button.click()
                 page.wait_for_timeout(3000) # Pause for ASP.NET postback to complete
+                current_page += 1
             else:
                 break
                 

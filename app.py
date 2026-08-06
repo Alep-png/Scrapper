@@ -122,7 +122,7 @@ def health() -> dict[str, str]:
 def scrape() -> list[dict[str, str]]:
     try:
         logging.info("MCMC scrape started")
-        return scrape_mcmc(max_pages=5)
+        return scrape_mcmc()
     except Exception as exc:
         logging.exception("MCMC scrape failed")
         raise HTTPException(status_code=500, detail=f"Scrape failed: {exc}") from exc
